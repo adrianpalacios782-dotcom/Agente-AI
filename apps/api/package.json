@@ -9,6 +9,7 @@
     "test": "tsc && node --test \"dist/tests/**/*.test.js\"",
     "seed:db": "tsc && node dist/scripts/seedPostgres.js",
     "seed:supabase": "tsc && node dist/scripts/seedSupabase.js",
+    "start:ui": "tsc && node dist/server.js",
     "dev:web": "adk web src/agent.ts",
     "dev:cli": "adk run src/agent.ts"
   },
@@ -22,6 +23,7 @@
   },
   "devDependencies": {
     "@google/adk-devtools": "^2.5.0",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
     "typescript": "^7.0.2"
