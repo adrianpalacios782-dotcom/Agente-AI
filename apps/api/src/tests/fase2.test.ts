@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { evaluateBrandCompliance } from '../compliance/checker.js';
 import { SupabaseMemoryStore } from '../memory/supabaseStore.js';
+import { PostgresMemoryStore, type PgQueryExecutor } from '../memory/postgresStore.js';
 import { createMemoryStore } from '../memory/factory.js';
 import type { MemoryItem } from '../memory/types.js';
 
@@ -157,4 +158,89 @@ test('SupabaseMemoryStore ejecuta búsqueda vectorial, protege confirmados y aud
   assert.equal(revisions.length, 1);
   assert.ok(fs.existsSync(viewFile));
   assert.match(fs.readFileSync(viewFile, 'utf8'), /Supabase/);
+});
+
+test('PostgresMemoryStore (Docker) ejecuta búsqueda vectorial, protege confirmados y audita', async () => {
+  const rows: Array<Record<string, unknown>> = [];
+  const revisions: Array<Record<string, unknown>> = [];
+  let vectorQueryCalled = false;
+
+  const mockDb: PgQueryExecutor = {
+    query: async <T>(sql: string, values: unknown[] = []) => {
+      if (sql.includes('match_memory_items')) {
+        vectorQueryCalled = true;
+        return { rows: rows.map((r) => ({ ...r, similarity: 0.94 })) as T[] };
+      }
+      if (sql.includes('INSERT INTO public.memory_revisions')) {
+        revisions.push({ id: values[0], prev: values[1], reason: values[3] });
+        return { rows: [] as T[] };
+      }
+      if (sql.includes('INSERT INTO public.memory_items')) {
+        const rec = {
+          id: `pg-${rows.length + 1}`,
+          namespace: values[0],
+          entity_key: values[1],
+          title: values[2],
+          content: values[3],
+          state: values[4],
+          source: values[5],
+          created_at: '2026-11-21T00:00:00Z',
+          updated_at: '2026-11-21T00:00:00Z',
+        };
+        rows.push(rec);
+        return { rows: [rec] as T[] };
+      }
+      if (sql.includes('UPDATE public.memory_items')) {
+        const id = values[values.length - 1];
+        const found = rows.find((r) => r.id === id);
+        if (found) {
+          found.state = values[0];
+          found.content = values[1];
+        }
+        return { rows: (found ? [found] : []) as T[] };
+      }
+      if (sql.includes('WHERE namespace = $1')) {
+        const found = rows.filter(
+          (r) =>
+            r.namespace === values[0] &&
+            r.state !== 'deprecated' &&
+            String(r.entity_key).toLowerCase() === String(values[1]).toLowerCase() &&
+            String(r.title).toLowerCase() === String(values[2]).toLowerCase(),
+        );
+        return { rows: found as T[] };
+      }
+      if (sql.includes('WHERE id = $1')) {
+        return { rows: rows.filter((r) => r.id === values[0]) as T[] };
+      }
+      return { rows: rows as T[] };
+    },
+  };
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'adrian-pg-'));
+  const viewFile = path.join(tmp, 'MEMORIA.md');
+  const fakeEmbed = async () => Array.from({ length: 768 }, () => 0.02);
+
+  const store = new PostgresMemoryStore(mockDb, viewFile, fakeEmbed);
+  assert.equal(store.backendName, 'postgres');
+
+  const c1 = await store.note(
+    { namespace: 'company', entityKey: 'bimcat_srl', title: 'Ciudad', content: 'Tarija', source: 'Adrián' },
+    'confirmed',
+  );
+  assert.equal(c1.action, 'created');
+
+  const conflict = await store.note(
+    { namespace: 'company', entityKey: 'bimcat_srl', title: 'Ciudad', content: 'Cochabamba', source: 'inferencia' },
+    'hypothesis',
+  );
+  assert.equal(conflict.action, 'conflict');
+
+  const hits = await store.search('ciudad de bimcat', 'company');
+  assert.equal(vectorQueryCalled, true);
+  assert.equal(hits[0].similarity, 0.94);
+
+  const dep = await store.setState(c1.item.id, 'deprecated', 'Prueba de auditoría');
+  assert.equal(dep.state, 'deprecated');
+  assert.equal(revisions.length, 1);
+  assert.match(fs.readFileSync(viewFile, 'utf8'), /PostgreSQL \+ pgvector \(Docker\)/);
 });

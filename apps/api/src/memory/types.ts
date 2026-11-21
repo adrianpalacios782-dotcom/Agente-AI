@@ -44,8 +44,10 @@ export type NoteResult =
   | { action: 'created' | 'updated'; item: MemoryItem }
   | { action: 'conflict'; item: MemoryItem; message: string };
 
+export type MemoryBackend = 'local' | 'postgres' | 'supabase';
+
 export interface IMemoryStore {
-  readonly backendName: 'local' | 'supabase';
+  readonly backendName: MemoryBackend;
   all(): Promise<MemoryItem[]>;
   search(query: string, namespace?: Namespace, includeDeprecated?: boolean): Promise<MemoryItem[]>;
   note(input: NewMemoryInput, state: 'confirmed' | 'hypothesis'): Promise<NoteResult>;
@@ -68,8 +70,13 @@ export function formatMemoryItems(items: MemoryItem[]): string {
     .join('\n');
 }
 
-export function renderMemoryMarkdown(items: MemoryItem[], backend: 'local' | 'supabase' = 'local'): string {
-  const origin = backend === 'supabase' ? 'Supabase (PostgreSQL + pgvector)' : '`memoria.json`';
+export function renderMemoryMarkdown(items: MemoryItem[], backend: MemoryBackend = 'local'): string {
+  const origin =
+    backend === 'postgres'
+      ? 'PostgreSQL + pgvector (Docker)'
+      : backend === 'supabase'
+        ? 'Supabase (PostgreSQL + pgvector)'
+        : '`memoria.json`';
   const lines = [
     '# MEMORIA de ADRIAN AI',
     '',

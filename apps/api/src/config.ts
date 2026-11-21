@@ -32,6 +32,12 @@ export const MODELS: Record<ModelTier, string> = {
   pro: process.env.ADRIAN_PRO_MODEL || 'gemini-pro-latest',
 };
 
+const databaseUrl = (process.env.DATABASE_URL || '').trim();
+export const POSTGRES = {
+  url: databaseUrl,
+  enabled: /^postgres(ql)?:\/\//i.test(databaseUrl),
+};
+
 const supabaseUrl = (process.env.SUPABASE_URL || '').trim();
 const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
 

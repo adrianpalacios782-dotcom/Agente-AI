@@ -7,6 +7,7 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "tsc && node --test \"dist/tests/**/*.test.js\"",
+    "seed:db": "tsc && node dist/scripts/seedPostgres.js",
     "seed:supabase": "tsc && node dist/scripts/seedSupabase.js",
     "dev:web": "adk web src/agent.ts",
     "dev:cli": "adk run src/agent.ts"
@@ -16,11 +17,13 @@
     "@google/genai": "^2.32.0",
     "@supabase/supabase-js": "^2.119.2",
     "dotenv": "^18.0.10",
+    "pg": "^8.23.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@google/adk-devtools": "^2.5.0",
     "@types/node": "^26.6.6",
+    "@types/pg": "^8.23.1",
     "typescript": "^7.0.2"
   }
 }
