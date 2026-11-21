@@ -1,0 +1,19 @@
+{
+  "name": "adrian-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ADRIAN AI — Sistema inteligente de trabajo para BIMCAT S.R.L.",
+  "workspaces": [
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "scripts": {
+    "build": "npm --workspace=@adrian-ai/api run build",
+    "typecheck": "npm --workspace=@adrian-ai/api run typecheck",
+    "test": "npm --workspace=@adrian-ai/api run test",
+    "dev:web": "npm --workspace=@adrian-ai/api run dev:web",
+    "dev:cli": "npm --workspace=@adrian-ai/api run dev:cli"
+  }
+}

@@ -1,0 +1,17 @@
+# Dependencias y compilados
+node_modules/
+dist/
+*.tsbuildinfo
+
+# Secretos (NUNCA subir a Git)
+.env
+.env.*
+!.env.example
+
+# Estado local
+data/
+*.log
+
+# SO / IDE
+.DS_Store
+Thumbs.db

@@ -1,0 +1,23 @@
+{
+  "name": "@adrian-ai/api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc && node --test \"dist/tests/**/*.test.js\"",
+    "dev:web": "adk web src/agent.ts",
+    "dev:cli": "adk run src/agent.ts"
+  },
+  "dependencies": {
+    "@google/adk": "^2.5.0",
+    "dotenv": "^18.0.10",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@google/adk-devtools": "^2.5.0",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2"
+  }
+}
