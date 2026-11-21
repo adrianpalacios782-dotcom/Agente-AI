@@ -1,12 +1,19 @@
 import { AgentTool, GOOGLE_SEARCH, LlmAgent } from '@google/adk';
 import { MODELS } from './config.js';
 import {
+  contextListTool,
+  contextReadTool,
   listAuthorizedFilesTool,
   listSkillsTool,
   loadSkillTool,
   memoryConfirmTool,
-  memoryProposeTool,
+  memoryNoteTool,
   memorySearchTool,
+  projectCreateTool,
+  projectListTool,
+  projectLogTool,
+  projectReadTool,
+  projectSetStatusTool,
   readAuthorizedFileTool,
   saveDeliverableTool,
 } from './tools/index.js';
@@ -31,11 +38,18 @@ const researchAgent = new LlmAgent({
 const researchTool = new AgentTool({ agent: researchAgent });
 
 const commonTools = [
+  contextListTool,
+  contextReadTool,
   listSkillsTool,
   loadSkillTool,
   memorySearchTool,
-  memoryProposeTool,
+  memoryNoteTool,
   memoryConfirmTool,
+  projectListTool,
+  projectReadTool,
+  projectCreateTool,
+  projectLogTool,
+  projectSetStatusTool,
   listAuthorizedFilesTool,
   readAuthorizedFileTool,
   saveDeliverableTool,

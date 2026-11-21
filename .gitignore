@@ -8,9 +8,9 @@ dist/
 .env.*
 !.env.example
 
-# Estado local
-data/
+# Logs y temporales
 *.log
+.adk/
 
 # SO / IDE
 .DS_Store

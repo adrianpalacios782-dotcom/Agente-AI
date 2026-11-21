@@ -5,13 +5,46 @@ import { z } from 'zod';
 import { PATHS, allowedReadDirs } from '../config.js';
 import { loadSkills, skillCatalog } from '../skills/loader.js';
 import { MemoryStore, NAMESPACES } from '../memory/store.js';
+import { ProjectStore } from '../projects/store.js';
 import { assertReadable, safeOutputPath } from '../security/paths.js';
 
 const skills = loadSkills(PATHS.skills);
-export const memory = new MemoryStore(PATHS.memoryFile, PATHS.memorySeed);
+export const memory = new MemoryStore(PATHS.memoryFile, PATHS.memorySeed, PATHS.memoryView);
+export const projects = new ProjectStore(PATHS.proyectos);
 
-const TEXT_EXT = new Set(['.md', '.txt', '.csv', '.json', '.tex', '.ts', '.tsx', '.js', '.jsx', '.py', '.sql', '.html', '.css', '.yml', '.yaml', '.xml', '.log']);
+const TEXT_EXT = new Set([
+  '.md', '.txt', '.csv', '.json', '.tex', '.ts', '.tsx', '.js', '.jsx',
+  '.py', '.sql', '.html', '.css', '.yml', '.yaml', '.xml', '.log',
+]);
 const MAX_READ_BYTES = 200_000;
+
+// ---------------------------------------------------------------- Contexto
+export const contextListTool = new FunctionTool({
+  name: 'context_list',
+  description: 'Lista los archivos de referencia estable disponibles en la carpeta contexto/.',
+  execute: () => {
+    if (!fs.existsSync(PATHS.contexto)) return { files: [] };
+    const files = fs
+      .readdirSync(PATHS.contexto, { withFileTypes: true })
+      .filter((e) => e.isFile())
+      .map((e) => e.name)
+      .sort();
+    return { dir: PATHS.contexto, files };
+  },
+});
+
+export const contextReadTool = new FunctionTool({
+  name: 'context_read',
+  description: 'Lee un archivo de la carpeta contexto/ (p. ej. "bimcat.md", "adrian.md", "creative-ai-business.md").',
+  parameters: z.object({
+    fileName: z.string().describe('Nombre del archivo dentro de contexto/, p. ej. "bimcat.md".'),
+  }),
+  execute: ({ fileName }) => {
+    const resolved = assertReadable(path.join(PATHS.contexto, fileName), [PATHS.contexto]);
+    if (!fs.existsSync(resolved)) return { error: `No existe contexto/${fileName}. Usa context_list.` };
+    return { file: resolved, content: fs.readFileSync(resolved, 'utf8') };
+  },
+});
 
 // ---------------------------------------------------------------- Skills
 export const listSkillsTool = new FunctionTool({
@@ -41,7 +74,7 @@ export const loadSkillTool = new FunctionTool({
 export const memorySearchTool = new FunctionTool({
   name: 'memory_search',
   description:
-    'Busca en la memoria persistente. Devuelve recuerdos etiquetados como CONFIRMADO o HIPÓTESIS. Usa solo los CONFIRMADOS como hechos.',
+    'Busca en la memoria persistente (6 dominios). Devuelve recuerdos etiquetados como CONFIRMADO o HIPÓTESIS. Usa solo los CONFIRMADOS como hechos.',
   parameters: z.object({
     query: z.string().describe('Palabras clave. Vacío para listar todo el namespace.'),
     namespace: z.enum([...NAMESPACES, 'all']).default('all'),
@@ -51,27 +84,33 @@ export const memorySearchTool = new FunctionTool({
   }),
 });
 
-export const memoryProposeTool = new FunctionTool({
-  name: 'memory_propose',
+export const memoryNoteTool = new FunctionTool({
+  name: 'memory_note',
   description:
-    'Registra un nuevo dato en memoria SIEMPRE como HIPÓTESIS. Úsalo cuando el usuario aporte información nueva o detectes algo relevante. Luego pide confirmación al usuario.',
+    'Apunta por tu cuenta en memoria cualquier dato, preferencia, corrección, decisión o aprendizaje útil para recordar. Usa "confirmed" SOLO si Adrián lo dijo directamente o consta en un documento citado; usa "hypothesis" para inferencias propias. Actualiza memoria/MEMORIA.md automáticamente.',
   parameters: z.object({
     namespace: z.enum(NAMESPACES),
     entityKey: z.string().describe('Entidad o proyecto, p. ej. "bimcat_srl", "adrian", "adrian_ai".'),
-    title: z.string(),
-    content: z.string(),
-    source: z.string().describe('Origen: ruta de archivo, URL o "conversación".'),
+    title: z.string().describe('Título corto y claro del recuerdo.'),
+    content: z.string().describe('Detalle concreto a recordar.'),
+    source: z.string().describe('Origen exacto: "Adrián (chat)", ruta de archivo o "inferencia del agente".'),
+    state: z
+      .enum(['confirmed', 'hypothesis'])
+      .describe('"confirmed" si lo dio Adrián o un documento verificado; "hypothesis" si es inferencia.'),
   }),
-  execute: (input) => {
-    const item = memory.addHypothesis(input);
-    return { saved: true, id: item.id, state: item.state, note: 'Pide a Adrián que confirme para promoverlo.' };
+  execute: ({ state, ...input }) => {
+    const res = memory.note(input, state);
+    if (res.action === 'conflict') {
+      return { saved: false, conflict: true, existingId: res.item.id, message: res.message };
+    }
+    return { saved: true, action: res.action, id: res.item.id, state: res.item.state };
   },
 });
 
 export const memoryConfirmTool = new FunctionTool({
   name: 'memory_confirm',
   description:
-    'Cambia el estado de un recuerdo a "confirmed" o "deprecated". Requiere aprobación explícita de Adrián (se mostrará un diálogo de confirmación).',
+    'Promueve una hipótesis a "confirmed" o marca un recuerdo como "deprecated". Requiere aprobación explícita de Adrián.',
   parameters: z.object({
     id: z.string(),
     state: z.enum(['confirmed', 'deprecated']),
@@ -82,6 +121,62 @@ export const memoryConfirmTool = new FunctionTool({
   execute: ({ id, state, reason, newContent }) => {
     const item = memory.setState(id, state, reason, newContent);
     return { updated: true, id: item.id, state: item.state };
+  },
+});
+
+// ---------------------------------------------------------------- Proyectos
+export const projectListTool = new FunctionTool({
+  name: 'project_list',
+  description: 'Lista todos los proyectos registrados en la carpeta proyectos/ con su estado actual.',
+  execute: () => ({ projects: projects.list() }),
+});
+
+export const projectReadTool = new FunctionTool({
+  name: 'project_read',
+  description: 'Lee la ficha completa de un proyecto (objetivo, próximos pasos, decisiones y bitácora).',
+  parameters: z.object({ slug: z.string().describe('Identificador del proyecto, p. ej. "adrian-ai".') }),
+  execute: ({ slug }) => ({ slug, content: projects.read(slug) }),
+});
+
+export const projectCreateTool = new FunctionTool({
+  name: 'project_create',
+  description: 'Crea un archivo nuevo en proyectos/ cuando Adrián inicie un proyecto o campaña de más de una sesión.',
+  parameters: z.object({
+    title: z.string().describe('Nombre del proyecto.'),
+    objective: z.string().describe('Objetivo concreto del proyecto.'),
+    status: z.string().default('activo').describe('Estado inicial (activo, en pausa, planificación).'),
+  }),
+  execute: ({ title, objective, status }) => {
+    const slug = projects.create(title, objective, status);
+    return { created: true, slug, file: path.join(PATHS.proyectos, `${slug}.md`) };
+  },
+});
+
+export const projectLogTool = new FunctionTool({
+  name: 'project_log',
+  description:
+    'Apunta por tu cuenta un avance, decisión o próximo paso en un proyecto existente (solo añade, nunca borra).',
+  parameters: z.object({
+    slug: z.string().describe('Identificador del proyecto, p. ej. "adrian-ai".'),
+    section: z.enum(['Bitácora', 'Decisiones', 'Próximos pasos']),
+    entry: z.string().describe('Texto concreto de la entrada.'),
+  }),
+  execute: ({ slug, section, entry }) => {
+    projects.append(slug, section, entry);
+    return { logged: true, slug, section };
+  },
+});
+
+export const projectSetStatusTool = new FunctionTool({
+  name: 'project_set_status',
+  description: 'Actualiza el estado de un proyecto (p. ej. activo, en pausa, finalizado) y lo registra en su bitácora.',
+  parameters: z.object({
+    slug: z.string(),
+    status: z.string(),
+  }),
+  execute: ({ slug, status }) => {
+    projects.setStatus(slug, status);
+    return { updated: true, slug, status };
   },
 });
 
@@ -138,7 +233,7 @@ export const readAuthorizedFileTool = new FunctionTool({
   },
 });
 
-// ---------------------------------------------------------------- Entregables
+// ---------------------------------------------------------------- Entregables (HITL)
 export const saveDeliverableTool = new FunctionTool({
   name: 'save_deliverable',
   description:
