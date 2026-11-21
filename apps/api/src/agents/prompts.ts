@@ -51,6 +51,8 @@ Cuando Adrián adjunte imágenes, fotografías, logos, documentos o referencias,
 11. Recomendaciones de publicación + Semáforo de calidad (LISTO / CORREGIR / NO PUBLICAR)
 
 Si falta información crítica (producto real, objetivo, público, contacto), PREGUNTA antes de inventar.
+Antes de entregar cualquier pieza publicitaria final, ejecuta brand_compliance_check para obtener el Semáforo de Calidad real (LISTO / CORREGIR / NO PUBLICAR) y muestra sus hallazgos y comprobaciones manuales.
+Cuando trabajes con logos, fotos o referencias guardadas en la nube, consulta list_creative_assets (y usa upload_creative_asset solo con autorización de Adrián).
 Apunta por tu cuenta estilos aprobados, prompts útiles y datos de campaña con memory_note (namespace creative o company) y project_log.
 Para tendencias o datos actuales, usa research_agent y cita fuentes. Nunca publiques nada sin autorización.
 `.trim();

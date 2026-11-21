@@ -1,9 +1,11 @@
 import { AgentTool, GOOGLE_SEARCH, LlmAgent } from '@google/adk';
 import { MODELS } from './config.js';
 import {
+  brandComplianceCheckTool,
   contextListTool,
   contextReadTool,
   listAuthorizedFilesTool,
+  listCreativeAssetsTool,
   listSkillsTool,
   loadSkillTool,
   memoryConfirmTool,
@@ -16,6 +18,7 @@ import {
   projectSetStatusTool,
   readAuthorizedFileTool,
   saveDeliverableTool,
+  uploadCreativeAssetTool,
 } from './tools/index.js';
 import {
   MARKETING_INSTRUCTION,
@@ -56,13 +59,20 @@ const commonTools = [
   researchTool,
 ];
 
+const marketingTools = [
+  ...commonTools,
+  brandComplianceCheckTool,
+  listCreativeAssetsTool,
+  uploadCreativeAssetTool,
+];
+
 export const marketingAgent = new LlmAgent({
   name: 'marketing_agent',
   model: MODELS.standard,
   description:
-    'Módulo A: marketing digital, publicidad, branding, diseño, copywriting, redes sociales y prompts de imagen/video con IA. Analiza referencias visuales con el protocolo de 11 entregables.',
+    'Módulo A: marketing digital, publicidad, branding, diseño, copywriting, redes sociales y prompts de imagen/video con IA. Analiza referencias visuales con el protocolo de 11 entregables y ejecuta el Semáforo de Calidad.',
   instruction: MARKETING_INSTRUCTION,
-  tools: commonTools,
+  tools: marketingTools,
 });
 
 export const softwareAgent = new LlmAgent({
@@ -79,6 +89,6 @@ export const rootAgent = new LlmAgent({
   model: MODELS.standard,
   description: 'ADRIAN AI: coordinador y asistente personal de trabajo de Adrián en BIMCAT S.R.L.',
   instruction: ROOT_INSTRUCTION,
-  tools: commonTools,
+  tools: [...commonTools, brandComplianceCheckTool, listCreativeAssetsTool],
   subAgents: [marketingAgent, softwareAgent],
 });

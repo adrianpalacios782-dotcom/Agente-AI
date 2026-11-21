@@ -2,14 +2,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { FunctionTool } from '@google/adk';
 import { z } from 'zod';
-import { PATHS, allowedReadDirs } from '../config.js';
+import { PATHS, SUPABASE, allowedReadDirs } from '../config.js';
 import { loadSkills, skillCatalog } from '../skills/loader.js';
-import { MemoryStore, NAMESPACES } from '../memory/store.js';
+import { createMemoryStore } from '../memory/factory.js';
+import { NAMESPACES, formatMemoryItems } from '../memory/types.js';
 import { ProjectStore } from '../projects/store.js';
 import { assertReadable, safeOutputPath } from '../security/paths.js';
+import { evaluateBrandCompliance } from '../compliance/checker.js';
+import {
+  listCreativeAssets,
+  recordComplianceAudit,
+  uploadCreativeAsset,
+} from '../storage/supabaseAssets.js';
 
 const skills = loadSkills(PATHS.skills);
-export const memory = new MemoryStore(PATHS.memoryFile, PATHS.memorySeed, PATHS.memoryView);
+export const memory = createMemoryStore();
 export const projects = new ProjectStore(PATHS.proyectos);
 
 const TEXT_EXT = new Set([
@@ -70,18 +77,22 @@ export const loadSkillTool = new FunctionTool({
   },
 });
 
-// ---------------------------------------------------------------- Memoria
+// ---------------------------------------------------------------- Memoria (Local o Supabase + pgvector)
 export const memorySearchTool = new FunctionTool({
   name: 'memory_search',
   description:
-    'Busca en la memoria persistente (6 dominios). Devuelve recuerdos etiquetados como CONFIRMADO o HIPÓTESIS. Usa solo los CONFIRMADOS como hechos.',
+    'Busca en la memoria persistente (6 dominios; usa búsqueda semántica pgvector cuando Supabase está activo). Devuelve recuerdos etiquetados como CONFIRMADO o HIPÓTESIS. Usa solo los CONFIRMADOS como hechos.',
   parameters: z.object({
-    query: z.string().describe('Palabras clave. Vacío para listar todo el namespace.'),
+    query: z.string().describe('Palabras clave o concepto a buscar. Vacío para listar el namespace.'),
     namespace: z.enum([...NAMESPACES, 'all']).default('all'),
   }),
-  execute: ({ query, namespace }) => ({
-    results: MemoryStore.format(memory.search(query, namespace === 'all' ? undefined : namespace).slice(0, 25)),
-  }),
+  execute: async ({ query, namespace }) => {
+    const found = await memory.search(query, namespace === 'all' ? undefined : namespace);
+    return {
+      backend: memory.backendName,
+      results: formatMemoryItems(found.slice(0, 25)),
+    };
+  },
 });
 
 export const memoryNoteTool = new FunctionTool({
@@ -98,12 +109,12 @@ export const memoryNoteTool = new FunctionTool({
       .enum(['confirmed', 'hypothesis'])
       .describe('"confirmed" si lo dio Adrián o un documento verificado; "hypothesis" si es inferencia.'),
   }),
-  execute: ({ state, ...input }) => {
-    const res = memory.note(input, state);
+  execute: async ({ state, ...input }) => {
+    const res = await memory.note(input, state);
     if (res.action === 'conflict') {
       return { saved: false, conflict: true, existingId: res.item.id, message: res.message };
     }
-    return { saved: true, action: res.action, id: res.item.id, state: res.item.state };
+    return { saved: true, backend: memory.backendName, action: res.action, id: res.item.id, state: res.item.state };
   },
 });
 
@@ -118,9 +129,76 @@ export const memoryConfirmTool = new FunctionTool({
     newContent: z.string().optional().describe('Contenido corregido, si aplica.'),
   }),
   requireConfirmation: true,
-  execute: ({ id, state, reason, newContent }) => {
-    const item = memory.setState(id, state, reason, newContent);
-    return { updated: true, id: item.id, state: item.state };
+  execute: async ({ id, state, reason, newContent }) => {
+    const item = await memory.setState(id, state, reason, newContent);
+    return { updated: true, backend: memory.backendName, id: item.id, state: item.state };
+  },
+});
+
+// ---------------------------------------------------------------- Semáforo de Calidad (Compliance)
+export const brandComplianceCheckTool = new FunctionTool({
+  name: 'brand_compliance_check',
+  description:
+    'Ejecuta el Semáforo de Calidad (LISTO / CORREGIR / NO PUBLICAR) sobre un borrador de anuncio, copy o guion cruzándolo contra la memoria CONFIRMADA de BIMCAT S.R.L. Úsalo siempre antes de entregar una pieza publicitaria final.',
+  parameters: z.object({
+    draftText: z.string().describe('Texto completo de la pieza publicitaria a auditar.'),
+    entityKey: z.string().default('bimcat_srl').describe('Entidad objetivo (por defecto "bimcat_srl").'),
+    projectSlug: z.string().optional().describe('Slug del proyecto asociado, si aplica.'),
+    usesRealProductPhoto: z.boolean().optional(),
+    hasImageAndLogoPermissions: z.boolean().optional(),
+    commercialLicenseVerified: z.boolean().optional(),
+    musicLicenseVerified: z.boolean().optional(),
+    syntheticContentDisclosed: z.boolean().optional(),
+    checkedOnMobile: z.boolean().optional(),
+  }),
+  execute: async (input) => {
+    const allItems = await memory.all();
+    const report = evaluateBrandCompliance(input, allItems);
+    await recordComplianceAudit({
+      entityKey: input.entityKey,
+      projectSlug: input.projectSlug,
+      draftText: input.draftText,
+      report,
+    });
+    return report;
+  },
+});
+
+// ---------------------------------------------------------------- Activos Creativos (Supabase Storage)
+export const listCreativeAssetsTool = new FunctionTool({
+  name: 'list_creative_assets',
+  description: 'Lista logos, fotos y referencias visuales registradas en Supabase Storage.',
+  parameters: z.object({
+    entityKey: z.string().optional(),
+    category: z.enum(['logo', 'reference', 'product_photo', 'ad_creative', 'manual', 'video', 'other']).optional(),
+  }),
+  execute: async ({ entityKey, category }) => {
+    if (!SUPABASE.enabled) {
+      return { enabled: false, message: 'Supabase Storage no está configurado aún en .env.' };
+    }
+    const assets = await listCreativeAssets(entityKey, category);
+    return { enabled: true, count: assets.length, assets };
+  },
+});
+
+export const uploadCreativeAssetTool = new FunctionTool({
+  name: 'upload_creative_asset',
+  description:
+    'Sube un archivo autorizado (logo, foto, referencia o manual) al bucket privado de Supabase Storage y registra su licencia. Requiere aprobación de Adrián.',
+  parameters: z.object({
+    localFilePath: z.string().describe('Ruta absoluta dentro de carpetas autorizadas.'),
+    entityKey: z.string().default('bimcat_srl'),
+    category: z.enum(['logo', 'reference', 'product_photo', 'ad_creative', 'manual', 'video', 'other']),
+    projectSlug: z.string().optional(),
+    licenseVerified: z.boolean().describe('True solo si el permiso/licencia comercial fue confirmado.'),
+    licenseNotes: z.string().optional(),
+    analysisSummary: z.string().optional(),
+  }),
+  requireConfirmation: true,
+  execute: async (input) => {
+    const resolved = assertReadable(input.localFilePath, allowedReadDirs());
+    const record = await uploadCreativeAsset({ ...input, localFilePath: resolved });
+    return { uploaded: true, id: record.id, storagePath: record.storage_path };
   },
 });
 

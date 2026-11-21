@@ -13,6 +13,7 @@
     "build": "npm --workspace=@adrian-ai/api run build",
     "typecheck": "npm --workspace=@adrian-ai/api run typecheck",
     "test": "npm --workspace=@adrian-ai/api run test",
+    "seed:supabase": "npm --workspace=@adrian-ai/api run seed:supabase",
     "dev:web": "npm --workspace=@adrian-ai/api run dev:web",
     "dev:cli": "npm --workspace=@adrian-ai/api run dev:cli"
   }

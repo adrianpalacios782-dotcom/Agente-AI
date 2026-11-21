@@ -1,59 +1,29 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import {
+  EpistemicState,
+  IMemoryStore,
+  MemoryItem,
+  NAMESPACES,
+  Namespace,
+  NewMemoryInput,
+  NoteResult,
+  formatMemoryItems,
+  renderMemoryMarkdown,
+} from './types.js';
 
-export const NAMESPACES = ['company', 'work', 'technical', 'projects', 'creative', 'preferences'] as const;
-export type Namespace = (typeof NAMESPACES)[number];
-export type EpistemicState = 'confirmed' | 'hypothesis' | 'deprecated';
-
-const NAMESPACE_LABELS: Record<Namespace, string> = {
-  company: 'Empresarial (BIMCAT S.R.L.)',
-  work: 'Laboral',
-  technical: 'Técnica',
-  projects: 'Proyectos',
-  creative: 'Creativa',
-  preferences: 'Preferencias',
-};
-
-export interface MemoryItem {
-  id: string;
-  namespace: Namespace;
-  entityKey: string;
-  title: string;
-  content: string;
-  state: EpistemicState;
-  source: string;
-  createdAt: string;
-  updatedAt: string;
-  history: Array<{ at: string; state: EpistemicState; content: string; reason: string }>;
-}
-
-export interface NewMemoryInput {
-  namespace: Namespace;
-  entityKey: string;
-  title: string;
-  content: string;
-  source: string;
-}
-
-export type NoteResult =
-  | { action: 'created' | 'updated'; item: MemoryItem }
-  | { action: 'conflict'; item: MemoryItem; message: string };
+export { NAMESPACES, type Namespace, type EpistemicState, type MemoryItem, type NewMemoryInput, type NoteResult };
 
 const norm = (s: string) =>
   s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, ' ').trim();
 
 /**
- * Memoria persistente local (JSON + vista Markdown). La Fase 2 la migrará a
- * Supabase + pgvector manteniendo esta interfaz.
- *
- * Reglas epistémicas:
- * - El agente apunta por su cuenta (note). Lo que Adrián dijo o consta en un
- *   documento citado entra como `confirmed`; las inferencias, como `hypothesis`.
- * - Una inferencia nunca sobrescribe un dato confirmado (devuelve conflicto).
- * - Nada se borra: los cambios quedan en el historial.
+ * Memoria persistente local (JSON + vista Markdown).
+ * Implementa IMemoryStore para interoperar de forma transparente con SupabaseMemoryStore.
  */
-export class MemoryStore {
+export class MemoryStore implements IMemoryStore {
+  readonly backendName = 'local' as const;
   private items: MemoryItem[] = [];
 
   constructor(
@@ -77,11 +47,11 @@ export class MemoryStore {
     if (this.viewFile) fs.writeFileSync(this.viewFile, this.toMarkdown(), 'utf8');
   }
 
-  all(): MemoryItem[] {
+  async all(): Promise<MemoryItem[]> {
     return [...this.items];
   }
 
-  search(query: string, namespace?: Namespace, includeDeprecated = false): MemoryItem[] {
+  async search(query: string, namespace?: Namespace, includeDeprecated = false): Promise<MemoryItem[]> {
     const terms = norm(query).split(' ').filter((t) => t.length > 2);
     return this.items
       .filter((i) => (namespace ? i.namespace === namespace : true))
@@ -96,8 +66,7 @@ export class MemoryStore {
       .map((r) => r.i);
   }
 
-  /** Apunte autónomo del agente. */
-  note(input: NewMemoryInput, state: 'confirmed' | 'hypothesis'): NoteResult {
+  async note(input: NewMemoryInput, state: 'confirmed' | 'hypothesis'): Promise<NoteResult> {
     if (!NAMESPACES.includes(input.namespace)) throw new Error(`Namespace inválido: ${input.namespace}`);
     const now = new Date().toISOString();
     const existing = this.items.find(
@@ -129,12 +98,7 @@ export class MemoryStore {
     return { action: 'created', item };
   }
 
-  addHypothesis(input: NewMemoryInput): MemoryItem {
-    return this.note(input, 'hypothesis').item;
-  }
-
-  /** Promover o descartar: solo tras aprobación humana. */
-  setState(id: string, state: EpistemicState, reason: string, newContent?: string): MemoryItem {
+  async setState(id: string, state: EpistemicState, reason: string, newContent?: string): Promise<MemoryItem> {
     const item = this.items.find((i) => i.id === id);
     if (!item) throw new Error(`No existe el recuerdo ${id}`);
     item.history.push({ at: new Date().toISOString(), state: item.state, content: item.content, reason });
@@ -146,41 +110,10 @@ export class MemoryStore {
   }
 
   toMarkdown(): string {
-    const lines = [
-      '# MEMORIA de ADRIAN AI',
-      '',
-      '> Archivo generado automáticamente desde `memoria.json`. No editar a mano: pide los cambios a ADRIAN AI.',
-      '> ✅ confirmado · 🔶 hipótesis · ~~obsoleto~~',
-      '',
-    ];
-    for (const ns of NAMESPACES) {
-      const group = this.items.filter((i) => i.namespace === ns);
-      if (group.length === 0) continue;
-      lines.push(`## ${NAMESPACE_LABELS[ns]}`, '');
-      for (const i of group) {
-        const text = `**${i.title}** (${i.entityKey}): ${i.content} — _fuente: ${i.source}_`;
-        if (i.state === 'confirmed') lines.push(`- ✅ ${text}`);
-        else if (i.state === 'hypothesis') lines.push(`- 🔶 ${text}`);
-        else lines.push(`- ~~${i.title}: ${i.content}~~`);
-      }
-      lines.push('');
-    }
-    return lines.join('\n');
+    return renderMemoryMarkdown(this.items, 'local');
   }
 
-  /** Formato para el modelo, con etiquetas epistémicas explícitas. */
   static format(items: MemoryItem[]): string {
-    if (items.length === 0) return '(sin resultados en memoria)';
-    return items
-      .map((i) => {
-        const tag =
-          i.state === 'confirmed'
-            ? `[CONFIRMADO | fuente: ${i.source}]`
-            : i.state === 'hypothesis'
-              ? '[HIPÓTESIS — NO USAR COMO HECHO]'
-              : '[OBSOLETO]';
-        return `${tag} (${i.namespace}/${i.entityKey}) id=${i.id}\n  ${i.title}: ${i.content}`;
-      })
-      .join('\n');
+    return formatMemoryItems(items);
   }
 }

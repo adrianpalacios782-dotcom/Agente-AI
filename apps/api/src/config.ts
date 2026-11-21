@@ -32,6 +32,20 @@ export const MODELS: Record<ModelTier, string> = {
   pro: process.env.ADRIAN_PRO_MODEL || 'gemini-pro-latest',
 };
 
+const supabaseUrl = (process.env.SUPABASE_URL || '').trim();
+const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
+
+export const SUPABASE = {
+  url: supabaseUrl,
+  serviceRoleKey: supabaseKey,
+  assetsBucket: (process.env.SUPABASE_ASSETS_BUCKET || 'adrian-assets').trim(),
+  enabled:
+    supabaseUrl.startsWith('https://') &&
+    supabaseKey.length > 20 &&
+    !supabaseUrl.includes('tu-proyecto') &&
+    !supabaseKey.includes('tu_service_role_key'),
+};
+
 export const PATHS = {
   root: PROJECT_ROOT,
   agentsMd: path.join(PROJECT_ROOT, 'AGENTS.md'),

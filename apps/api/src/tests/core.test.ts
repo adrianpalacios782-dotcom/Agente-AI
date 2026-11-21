@@ -36,30 +36,30 @@ test('parseSkill rechaza Skills sin secciones obligatorias', () => {
   assert.throws(() => parseSkill(bad), /falta la sección/);
 });
 
-test('la memoria semilla confirma BIMCAT S.R.L. y regenera MEMORIA.md', () => {
+test('la memoria semilla confirma BIMCAT S.R.L. y regenera MEMORIA.md', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'adrian-mem-'));
   const view = path.join(tmp, 'MEMORIA.md');
   const store = new MemoryStore(path.join(tmp, 'memoria.json'), path.join(ROOT, 'memoria', 'semilla.json'), view);
-  const hits = store.search('BIMCAT entidad', 'company');
+  const hits = await store.search('BIMCAT entidad', 'company');
   assert.ok(hits.some((h) => h.state === 'confirmed' && h.content.includes('BIMCAT S.R.L.')));
   assert.ok(fs.existsSync(view));
   assert.match(fs.readFileSync(view, 'utf8'), /BIMCAT S\.R\.L\./);
 });
 
-test('memory.note apunta autónomamente y bloquea sobrescribir confirmados con hipótesis', () => {
+test('memory.note apunta autónomamente y bloquea sobrescribir confirmados con hipótesis', async () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'adrian-note-'));
   const store = new MemoryStore(path.join(tmp, 'memoria.json'));
-  const r1 = store.note(
+  const r1 = await store.note(
     { namespace: 'company', entityKey: 'bimcat_srl', title: 'Horario', content: 'L-V 8:30-18:00', source: 'Adrián (chat)' },
     'confirmed',
   );
   assert.equal(r1.action, 'created');
-  const r2 = store.note(
+  const r2 = await store.note(
     { namespace: 'company', entityKey: 'bimcat_srl', title: 'Horario', content: '24/7', source: 'inferencia' },
     'hypothesis',
   );
   assert.equal(r2.action, 'conflict');
-  const updated = store.setState(r1.item.id, 'deprecated', 'Cambió el horario');
+  const updated = await store.setState(r1.item.id, 'deprecated', 'Cambió el horario');
   assert.equal(updated.state, 'deprecated');
   assert.equal(updated.history.length, 1);
 });

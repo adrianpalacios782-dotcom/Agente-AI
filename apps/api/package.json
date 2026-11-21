@@ -7,11 +7,14 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "test": "tsc && node --test \"dist/tests/**/*.test.js\"",
+    "seed:supabase": "tsc && node dist/scripts/seedSupabase.js",
     "dev:web": "adk web src/agent.ts",
     "dev:cli": "adk run src/agent.ts"
   },
   "dependencies": {
     "@google/adk": "^2.5.0",
+    "@google/genai": "^2.32.0",
+    "@supabase/supabase-js": "^2.119.2",
     "dotenv": "^18.0.10",
     "zod": "^4.6.7"
   },
