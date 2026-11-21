@@ -8,9 +8,10 @@ dist/
 .env.*
 !.env.example
 
-# Logs y temporales
+# Logs, backups y temporales
 *.log
 .adk/
+backups/
 
 # SO / IDE
 .DS_Store

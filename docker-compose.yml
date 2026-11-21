@@ -5,10 +5,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-adrian}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-adrian_local_dev}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Configura POSTGRES_PASSWORD en .env}
       POSTGRES_DB: ${POSTGRES_DB:-adrian_ai}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - adrian_pgdata:/var/lib/postgresql/data
       - ./docker/init:/docker-entrypoint-initdb.d:ro
@@ -25,7 +25,7 @@ services:
     profiles: ["automation"]
     restart: unless-stopped
     ports:
-      - "${N8N_PORT:-5678}:5678"
+      - "127.0.0.1:${N8N_PORT:-5678}:5678"
     environment:
       GENERIC_TIMEZONE: America/La_Paz
       TZ: America/La_Paz

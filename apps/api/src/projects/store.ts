@@ -9,6 +9,11 @@ export interface ProjectSummary {
 
 const today = () => new Date().toISOString().slice(0, 10);
 
+/** Evita inyección de encabezados Markdown o saltos de línea en entradas de bitácora. */
+function sanitizeSingleLine(text: string, maxLen = 500): string {
+  return text.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, maxLen);
+}
+
 export function slugify(name: string): string {
   return (
     name
@@ -51,14 +56,17 @@ export class ProjectStore {
   }
 
   create(title: string, objective: string, status = 'activo'): string {
-    const slug = slugify(title);
+    const cleanTitle = sanitizeSingleLine(title, 120);
+    const cleanObjective = sanitizeSingleLine(objective, 400);
+    const cleanStatus = sanitizeSingleLine(status, 40);
+    const slug = slugify(cleanTitle);
     const f = this.file(slug);
     if (fs.existsSync(f)) throw new Error(`El proyecto "${slug}" ya existe.`);
     const body = [
-      `# Proyecto: ${title}`,
+      `# Proyecto: ${cleanTitle}`,
       '',
-      `**Estado:** ${status}`,
-      `**Objetivo:** ${objective}`,
+      `**Estado:** ${cleanStatus}`,
+      `**Objetivo:** ${cleanObjective}`,
       '',
       '## Próximos pasos',
       '',
@@ -72,11 +80,12 @@ export class ProjectStore {
     return slug;
   }
 
-  /** Añade una entrada a una sección (Bitácora, Decisiones o Próximos pasos). */
+  /** Añade una entrada sanitizada (una línea) a una sección (Bitácora, Decisiones o Próximos pasos). */
   append(slug: string, section: 'Bitácora' | 'Decisiones' | 'Próximos pasos', entry: string): void {
     const f = this.file(slug);
+    const cleanEntry = sanitizeSingleLine(entry, 500);
     let text = this.read(slug).replace(/\r\n/g, '\n');
-    const line = section === 'Próximos pasos' ? `- [ ] ${entry}` : `- ${today()} — ${entry}`;
+    const line = section === 'Próximos pasos' ? `- [ ] ${cleanEntry}` : `- ${today()} — ${cleanEntry}`;
     const header = `## ${section}`;
     const idx = text.indexOf(header);
     if (idx === -1) {
@@ -92,11 +101,12 @@ export class ProjectStore {
 
   setStatus(slug: string, status: string): void {
     const f = this.file(slug);
+    const cleanStatus = sanitizeSingleLine(status, 40);
     const text = this.read(slug);
     const updated = /^\*\*Estado:\*\*.*$/m.test(text)
-      ? text.replace(/^\*\*Estado:\*\*.*$/m, `**Estado:** ${status}`)
-      : text.replace(/^(#.*\n)/, `$1\n**Estado:** ${status}\n`);
+      ? text.replace(/^\*\*Estado:\*\*.*$/m, `**Estado:** ${cleanStatus}`)
+      : text.replace(/^(#.*\n)/, `$1\n**Estado:** ${cleanStatus}\n`);
     fs.writeFileSync(f, updated, 'utf8');
-    this.append(slug, 'Bitácora', `Estado cambiado a "${status}".`);
+    this.append(slug, 'Bitácora', `Estado cambiado a "${cleanStatus}".`);
   }
 }

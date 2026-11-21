@@ -8,6 +8,7 @@ import { evaluateBrandCompliance } from '../compliance/checker.js';
 import { SupabaseMemoryStore } from '../memory/supabaseStore.js';
 import { PostgresMemoryStore, type PgQueryExecutor } from '../memory/postgresStore.js';
 import { createMemoryStore } from '../memory/factory.js';
+import { POSTGRES, SUPABASE } from '../config.js';
 import type { MemoryItem } from '../memory/types.js';
 
 const confirmedSample: MemoryItem[] = [
@@ -64,9 +65,11 @@ test('Semáforo devuelve LISTO cuando todo es verificable y está autorizado', (
   assert.equal(r.findings.length, 0);
 });
 
-test('createMemoryStore cae a backend local si Supabase no está configurado', () => {
+test('createMemoryStore elige el backend correcto según prioridad (.env)', async () => {
   const store = createMemoryStore();
-  assert.equal(store.backendName, 'local');
+  const expected = POSTGRES.enabled ? 'postgres' : SUPABASE.enabled ? 'supabase' : 'local';
+  assert.equal(store.backendName, expected);
+  if (store instanceof PostgresMemoryStore) await store.close();
 });
 
 test('SupabaseMemoryStore ejecuta búsqueda vectorial, protege confirmados y audita revisiones', async () => {

@@ -26,9 +26,13 @@ export interface ComplianceReport {
   summary: string;
 }
 
-const PRICE_OR_PROMO_REGEX = /(?:Bs\.?\s*\d+|\$\s*\d+|USD\s*\d+|\d+\s*%|\b(?:gratis|descuento|oferta|promoción|2x1|50%|garantizado|certificado|100%)\b)/gi;
+const PRICE_OR_PROMO_REGEX =
+  /(?:Bs\.?\s*\d+|\$\s*\d+|USD\s*\d+|\d+\s*%|\b(?:gratis|descuento|oferta|promoción|2x1|50%|garantizado|certificado|100%|bolivianos|dólares|cuota\s+de|mensualidad\s+de)\b)/gi;
 const BIG_CAP_REGEX = /\bbig\s*cap\b/i;
-const PRIVATE_TOKEN_REGEX = /(?:AIza[0-9A-Za-z_-]{20,}|sk-[0-9A-Za-z]{20,}|eyJ[0-9A-Za-z_-]{20,}\.)/;
+const PRIVATE_TOKEN_REGEX =
+  /(?:AIza[0-9A-Za-z_-]{20,}|sk-[0-9A-Za-z_-]{20,}|eyJ[0-9A-Za-z_-]{20,}\.|postgres(?:ql)?:\/\/[^:\s]+:[^@\s]+@|\b(?:\d[ -]*?){13,16}\b)/;
+const PII_CONTACT_REGEX =
+  /(?:[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}|\+591[\s-]?\d{7,8}|\b(?:cel|tel|whatsapp|wa)[:.\s-]*\d{7,8}\b)/gi;
 const PLACEHOLDER_REGEX = /\[(?:DATO FALTANTE|PRODUCTO|PRECIO|CONTACTO|NEGOCIO)[^\]]*\]/i;
 
 /**
@@ -59,12 +63,12 @@ export function evaluateBrandCompliance(
     });
   }
 
-  // 2. Exposición accidental de credenciales o tokens
+  // 2. Exposición accidental de credenciales, tokens, DATABASE_URL o tarjetas
   if (PRIVATE_TOKEN_REGEX.test(text)) {
     findings.push({
       severity: 'NO PUBLICAR',
       code: 'CONFIDENTIAL_TOKEN_LEAK',
-      message: 'El borrador parece contener una clave API o token confidencial.',
+      message: 'El borrador parece contener una clave API, URL con contraseña, token o número de tarjeta.',
     });
   }
 
@@ -77,7 +81,19 @@ export function evaluateBrandCompliance(
     });
   }
 
-  // 4. Precios, descuentos o promesas absolutas no confirmadas en memoria
+  // 4. Datos de contacto/PII no confirmados en memoria empresarial
+  const contactMatches = [...new Set(text.match(PII_CONTACT_REGEX) ?? [])];
+  for (const contact of contactMatches) {
+    if (!confirmedCorpus.includes(contact.toLowerCase())) {
+      findings.push({
+        severity: 'CORREGIR',
+        code: 'UNVERIFIED_CONTACT_OR_PII',
+        message: `Contacto/dato personal "${contact}" no figura en la memoria CONFIRMADA de ${entity}. Verifica que sea público y oficial.`,
+      });
+    }
+  }
+
+  // 5. Precios, descuentos o promesas absolutas no confirmadas en memoria
   const promoMatches = [...new Set(text.match(PRICE_OR_PROMO_REGEX) ?? [])];
   for (const match of promoMatches) {
     if (!confirmedCorpus.includes(match.toLowerCase())) {
@@ -89,7 +105,7 @@ export function evaluateBrandCompliance(
     }
   }
 
-  // 5. Permisos, licencias y calidad operativa (Creative AI Business checklist)
+  // 6. Permisos, licencias y calidad operativa (Creative AI Business checklist)
   if (input.hasImageAndLogoPermissions === false) {
     findings.push({
       severity: 'NO PUBLICAR',

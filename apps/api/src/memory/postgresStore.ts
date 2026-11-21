@@ -1,7 +1,8 @@
-import fs from 'node:fs';
+import fs from 'node:fs/promises';
 import path from 'node:path';
 import { Pool } from 'pg';
 import { embedText, formatPgVector } from './embeddings.js';
+import { logSecurityEvent } from '../security/auditLog.js';
 import {
   EpistemicState,
   IMemoryStore,
@@ -55,7 +56,8 @@ function rowToItem(row: DbMemoryRow): MemoryItem {
 
 /**
  * Memoria persistente en PostgreSQL + pgvector (Docker local o cualquier Postgres estándar).
- * Misma interfaz IMemoryStore que local y Supabase.
+ * - Pool con timeouts acotados (evita bloqueos si Docker está pausado).
+ * - Actualización asíncrona del espejo `MEMORIA.md`.
  */
 export class PostgresMemoryStore implements IMemoryStore {
   readonly backendName = 'postgres' as const;
@@ -67,7 +69,13 @@ export class PostgresMemoryStore implements IMemoryStore {
   ) {}
 
   static fromUrl(connectionString: string, viewFile?: string): PostgresMemoryStore {
-    const pool = new Pool({ connectionString });
+    const pool = new Pool({
+      connectionString,
+      max: 10,
+      connectionTimeoutMillis: 3_000,
+      idleTimeoutMillis: 30_000,
+      statement_timeout: 5_000,
+    });
     return new PostgresMemoryStore(pool, viewFile);
   }
 
@@ -79,10 +87,14 @@ export class PostgresMemoryStore implements IMemoryStore {
     if (!this.viewFile) return;
     try {
       const items = await this.all();
-      fs.mkdirSync(path.dirname(this.viewFile), { recursive: true });
-      fs.writeFileSync(this.viewFile, renderMemoryMarkdown(items, 'postgres'), 'utf8');
-    } catch {
-      // No bloquear DB si falla el espejo local.
+      await fs.mkdir(path.dirname(this.viewFile), { recursive: true });
+      await fs.writeFile(this.viewFile, renderMemoryMarkdown(items, 'postgres'), 'utf8');
+    } catch (err) {
+      logSecurityEvent({
+        level: 'warn',
+        event: 'MEMORY_MD_SYNC_FAILED',
+        detail: err instanceof Error ? err.message : String(err),
+      });
     }
   }
 

@@ -27,9 +27,9 @@ dotenv.config({ path: path.join(PROJECT_ROOT, '.env'), quiet: true });
 export type ModelTier = 'fast' | 'standard' | 'pro';
 
 export const MODELS: Record<ModelTier, string> = {
-  fast: process.env.ADRIAN_FAST_MODEL || 'gemini-flash-lite-latest',
-  standard: process.env.ADRIAN_STANDARD_MODEL || 'gemini-flash-latest',
-  pro: process.env.ADRIAN_PRO_MODEL || 'gemini-pro-latest',
+  fast: process.env.ADRIAN_FAST_MODEL || 'gemini-3.1-flash-lite',
+  standard: process.env.ADRIAN_STANDARD_MODEL || 'gemini-3.8-flash',
+  pro: process.env.ADRIAN_PRO_MODEL || 'gemini-3.1-pro-preview',
 };
 
 const databaseUrl = (process.env.DATABASE_URL || '').trim();

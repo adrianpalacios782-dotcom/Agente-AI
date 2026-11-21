@@ -23,3 +23,5 @@
 - 2026-11-21 — Fase 0+1 implementada: agentes ADK, 15 Skills, memoria con estados epistémicos, seguridad HITL. 5 pruebas en verde.
 - 2026-11-21 — Añadidos AGENTS.md, contexto/, memoria/ y proyectos/ a pedido de Adrián. Reglas: preguntar en vez de inventar; apuntar por cuenta propia.
 - 2026-11-21 — Fase 2 implementada: migración SQL Supabase (PostgreSQL + pgvector HNSW + RLS + Storage privado), SupabaseMemoryStore con búsqueda semántica Gemini Embeddings y fallback local, herramienta automatizada brand_compliance_check (Semáforo de Calidad), herramientas de activos creativos y script npm run seed:supabase.
+- 2026-11-21 — Migración a Docker local (PostgreSQL 16 + pgvector) como base principal.
+- 2026-11-21 — Aplicados los 3 bloques de auditoría (hardening Docker 127.0.0.1, HITL dinámico en memory_note(confirmed), blindaje symlinks/OOM en paths.ts, optimización de latencia con prompts compactos y thinkingBudget, auditoría de compliance en Postgres y script backup:db).

@@ -15,6 +15,7 @@
     "test": "npm --workspace=@adrian-ai/api run test",
     "seed:db": "npm --workspace=@adrian-ai/api run seed:db",
     "seed:supabase": "npm --workspace=@adrian-ai/api run seed:supabase",
+    "backup:db": "powershell -ExecutionPolicy Bypass -File scripts/backup-db.ps1",
     "dev:web": "npm --workspace=@adrian-ai/api run dev:web",
     "dev:cli": "npm --workspace=@adrian-ai/api run dev:cli"
   }
