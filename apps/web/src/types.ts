@@ -9,6 +9,7 @@ export type NavView =
   | 'trazas'
   | 'artefactos'
   | 'estado'
+  | 'telemetria'
   | 'configuracion';
 
 export interface AdkInlineData {
@@ -160,4 +161,15 @@ export interface PendingAttachment {
   base64?: string;
   textContent?: string;
   previewUrl?: string;
+}
+
+export interface TelemetryStats {
+  enabled: boolean;
+  totalRequests: number;
+  totalPromptTokens: number;
+  totalCompletionTokens: number;
+  totalTokens: number;
+  totalCostUsd: number;
+  byModel: Array<{ model: string; requests: number; tokens: number; costUsd: number }>;
+  byDay: Array<{ day: string; requests: number; tokens: number; costUsd: number }>;
 }

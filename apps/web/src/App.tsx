@@ -16,6 +16,7 @@ import {
   SettingsView,
   TemplatesView,
 } from './components/WorkspaceViews';
+import { TelemetryView } from './components/TelemetryView';
 import type {
   AdkAgentNode,
   AdkAppInfo,
@@ -468,6 +469,8 @@ export const App: React.FC = () => {
           {activeView === 'artefactos' && <ArtifactsView appName={activeApp} sessionId={activeSessionId} />}
 
           {activeView === 'evaluaciones' && <EvalsView appName={activeApp} sessionId={activeSessionId} />}
+
+          {activeView === 'telemetria' && <TelemetryView />}
 
           {activeView === 'configuracion' && <SettingsView overview={overview} online={online} />}
         </main>

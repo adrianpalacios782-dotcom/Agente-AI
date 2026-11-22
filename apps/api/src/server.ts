@@ -8,11 +8,14 @@ import { loadSkills } from './skills/loader.js';
 import { memory, projects } from './tools/index.js';
 import { assertReadable, isBlockedSecretPath, readFileHeadUtf8 } from './security/paths.js';
 import { PostgresSessionService } from './sessions/postgresSessionService.js';
+import { TelemetryService } from './telemetry/service.js';
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.ADRIAN_PORT || 8001);
 const WEB_DIST_DIR = path.join(PATHS.root, 'apps', 'web', 'dist');
 const AGENT_DIST_FILE = path.join(PATHS.root, 'apps', 'api', 'dist', 'agent.js');
+
+let telemetry: TelemetryService | undefined;
 
 function listOutputsRecursive(baseDir: string): Array<{ relativePath: string; size: number; updatedAt: string }> {
   if (!fs.existsSync(baseDir)) return [];
@@ -198,6 +201,23 @@ function mountWorkspaceRoutes(app: Application): void {
     }
   });
 
+  // Telemetría de uso de LLM (tokens y costo estimado)
+  router.get('/telemetry', async (_req, res) => {
+    try {
+      if (!telemetry) {
+        res.json({ enabled: false, message: 'Telemetría no disponible (PostgreSQL desactivado).' });
+        return;
+      }
+      const stats = await telemetry.stats();
+      res.json({
+        enabled: telemetry.enabled,
+        ...stats,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   app.use('/api/workspace', router);
 
   // Endpoint seguro para automatizaciones entrantes desde n8n (fail-closed con token)
@@ -238,6 +258,14 @@ async function main() {
     await sessionService.ensureSchema();
   }
 
+  if (POSTGRES.enabled) {
+    telemetry = new TelemetryService(POSTGRES.url);
+    await telemetry.init();
+    if (sessionService) {
+      sessionService.setTelemetryService(telemetry);
+    }
+  }
+
   const server = new AdkApiServer({
     host: HOST,
     port: PORT,
@@ -261,6 +289,16 @@ async function main() {
   mountWorkspaceRoutes(server.app);
 
   console.log(`\n✨ ADRIAN AI (Interfaz Cognivo + ADK) disponible en: http://${HOST}:${PORT}\n`);
+
+  // Cerrar pool de telemetría al terminar el proceso
+  process.on('SIGINT', async () => {
+    if (telemetry) await telemetry.close();
+    process.exit(0);
+  });
+  process.on('SIGTERM', async () => {
+    if (telemetry) await telemetry.close();
+    process.exit(0);
+  });
 }
 
 main().catch((err) => {

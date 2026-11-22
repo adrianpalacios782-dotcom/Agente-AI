@@ -12,6 +12,14 @@ import {
   type Session,
 } from '@google/adk';
 import type { PgQueryExecutor } from '../memory/postgresStore.js';
+import { MODELS } from '../config.js';
+import { TelemetryService } from '../telemetry/service.js';
+
+interface UsageMetadata {
+  promptTokenCount?: number;
+  candidatesTokenCount?: number;
+  totalTokenCount?: number;
+}
 
 interface SessionRow {
   id: string;
@@ -57,9 +65,15 @@ CREATE INDEX IF NOT EXISTS adk_session_events_sid_seq_idx
  */
 export class PostgresSessionService extends BaseSessionService {
   private initialized = false;
+  private telemetry?: TelemetryService;
 
   constructor(private readonly db: PgQueryExecutor) {
     super();
+  }
+
+  /** Inyecta el servicio de telemetría opcional para registrar uso de LLM. */
+  setTelemetryService(telemetry: TelemetryService): void {
+    this.telemetry = telemetry;
   }
 
   static fromUrl(connectionString: string): PostgresSessionService {
@@ -218,6 +232,58 @@ export class PostgresSessionService extends BaseSessionService {
       [JSON.stringify(session.state ?? {}), nowSec, session.id],
     );
 
+    // Telemetría: capturar uso de tokens de eventos del modelo (Gemini vía ADK)
+    await this.recordUsage(appended, session.id);
+
     return appended;
+  }
+
+  /** Extrae usageMetadata de un evento ADK (puede estar en raíz o dentro de content). */
+  private extractUsageMetadata(event: Event): UsageMetadata | null {
+    const ev = event as unknown as Record<string, unknown>;
+    const content = ev.content as unknown as Record<string, unknown> | undefined;
+    const candidates: Array<Record<string, unknown> | undefined> = [ev, content];
+    for (const c of candidates) {
+      if (!c || typeof c !== 'object') continue;
+      const um = c['usageMetadata'] ?? c['usage_metadata'];
+      if (um && typeof um === 'object' && !Array.isArray(um)) {
+        return um as UsageMetadata;
+      }
+    }
+    return null;
+  }
+
+  /** Registra uso de LLM en telemetría si hay usageMetadata y servicio disponible. */
+  private async recordUsage(event: Event, sessionId: string): Promise<void> {
+    if (!this.telemetry) return;
+
+    const um = this.extractUsageMetadata(event);
+    if (!um) return;
+
+    const promptTokens = Number(um.promptTokenCount ?? 0);
+    const completionTokens = Number(um.candidatesTokenCount ?? 0);
+    const totalTokens = Number(um.totalTokenCount ?? promptTokens + completionTokens);
+
+    if (totalTokens === 0 && promptTokens === 0 && completionTokens === 0) return;
+
+    const agentName = (event.author ?? 'unknown') as string;
+    const ev = event as unknown as Record<string, unknown>;
+    const customMetadata = (ev.customMetadata ?? ev.customData) as Record<string, unknown> | undefined;
+    // Los eventos ADK no exponen el modelo usado; se infiere del agente emisor
+    // según la configuración de MODELS. Un override explícito tiene prioridad.
+    const modelFromAgent =
+      agentName === 'software_agent' ? MODELS.pro : MODELS.standard;
+    const model =
+      (customMetadata?.model as string | undefined) ?? modelFromAgent;
+
+    await this.telemetry.record({
+      sessionId,
+      agentName,
+      model,
+      promptTokens,
+      completionTokens,
+      totalTokens,
+      costUsd: 0, // se calcula en el servicio según el modelo
+    });
   }
 }

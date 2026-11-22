@@ -9,6 +9,7 @@ import type {
   OutputFileSummary,
   ProjectSummary,
   SkillSummary,
+  TelemetryStats,
   WorkspaceOverview,
 } from '../types';
 
@@ -246,6 +247,10 @@ export const api = {
 
   skillDetail(name: string): Promise<SkillSummary & { body: string }> {
     return fetchJson<SkillSummary & { body: string }>(`/api/workspace/skills/${encodeURIComponent(name)}`);
+  },
+
+  telemetry(): Promise<TelemetryStats> {
+    return fetchJson<TelemetryStats>('/api/workspace/telemetry');
   },
 
   outputs(): Promise<{ outputs: OutputFileSummary[] }> {

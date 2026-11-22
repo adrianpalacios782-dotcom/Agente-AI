@@ -86,6 +86,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { id: 'trazas', label: 'Trazas', icon: <GitBranch size={16} /> },
     { id: 'artefactos', label: 'Artefactos', icon: <Box size={16} />, badge: artifactCount > 0 ? artifactCount : undefined },
     { id: 'estado', label: 'Estado', icon: <Database size={16} /> },
+    { id: 'telemetria', label: 'Telemetría', icon: <Activity size={16} /> },
   ];
 
   // Agrupar sesiones recientes por fecha
