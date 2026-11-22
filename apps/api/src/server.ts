@@ -1,11 +1,13 @@
+import { timingSafeEqual } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import express, { type Application } from 'express';
 import { AdkApiServer, version as adkVersion } from '@google/adk-devtools';
-import { MODELS, PATHS, POSTGRES, SUPABASE, allowedReadDirs } from './config.js';
+import { GITHUB, MODELS, N8N, PATHS, POSTGRES, SUPABASE, allowedReadDirs } from './config.js';
 import { loadSkills } from './skills/loader.js';
 import { memory, projects } from './tools/index.js';
 import { assertReadable, isBlockedSecretPath, readFileHeadUtf8 } from './security/paths.js';
+import { PostgresSessionService } from './sessions/postgresSessionService.js';
 
 const HOST = '127.0.0.1';
 const PORT = Number(process.env.ADRIAN_PORT || 8001);
@@ -59,9 +61,14 @@ function mountWorkspaceRoutes(app: Application): void {
         entity: 'BIMCAT S.R.L.',
         models: MODELS,
         memoryBackend: memory.backendName,
+        sessionsBackend: POSTGRES.enabled ? 'postgres' : 'memory',
         database: {
           postgresEnabled: POSTGRES.enabled,
           supabaseEnabled: SUPABASE.enabled,
+        },
+        integrations: {
+          githubEnabled: GITHUB.enabled,
+          n8nEnabled: N8N.enabled,
         },
         counts: {
           skills: skills.length,
@@ -192,13 +199,50 @@ function mountWorkspaceRoutes(app: Application): void {
   });
 
   app.use('/api/workspace', router);
+
+  // Endpoint seguro para automatizaciones entrantes desde n8n (fail-closed con token)
+  app.get('/api/automation/digest', async (req, res) => {
+    if (!N8N.enabled) {
+      res.status(503).json({ error: 'ADRIAN_AUTOMATION_TOKEN no está configurado (mínimo 16 caracteres) en .env.' });
+      return;
+    }
+    const provided = String(req.header('X-Adrian-Automation-Token') ?? '');
+    const a = Buffer.from(provided, 'utf8');
+    const b = Buffer.from(N8N.automationToken, 'utf8');
+    if (a.length !== b.length || !timingSafeEqual(a, b)) {
+      res.status(401).json({ error: 'Token de automatización inválido.' });
+      return;
+    }
+    try {
+      const allMemory = await memory.all();
+      res.json({
+        entity: 'BIMCAT S.R.L.',
+        generatedAt: new Date().toISOString(),
+        projects: projects.list(),
+        memoryStats: {
+          confirmed: allMemory.filter((m) => m.state === 'confirmed').length,
+          hypothesis: allMemory.filter((m) => m.state === 'hypothesis').length,
+          deprecated: allMemory.filter((m) => m.state === 'deprecated').length,
+        },
+        outputsCount: listOutputsRecursive(PATHS.outputs).length,
+      });
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
 }
 
 async function main() {
+  const sessionService = POSTGRES.enabled ? PostgresSessionService.fromUrl(POSTGRES.url) : undefined;
+  if (sessionService) {
+    await sessionService.ensureSchema();
+  }
+
   const server = new AdkApiServer({
     host: HOST,
     port: PORT,
     agentsDir: AGENT_DIST_FILE,
+    sessionService,
     serveDebugUI: false,
     allowOrigins: [
       `http://127.0.0.1:${PORT}`,

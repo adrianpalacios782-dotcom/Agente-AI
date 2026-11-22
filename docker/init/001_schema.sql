@@ -124,3 +124,28 @@ AS $$
   ORDER BY m.embedding <=> query_embedding
   LIMIT match_count;
 $$;
+
+-- Fase 4: Sesiones persistentes de ADK en PostgreSQL
+CREATE TABLE IF NOT EXISTS public.adk_sessions (
+  id               TEXT PRIMARY KEY,
+  app_name         TEXT NOT NULL,
+  user_id          TEXT NOT NULL,
+  state            JSONB NOT NULL DEFAULT '{}'::jsonb,
+  last_update_time DOUBLE PRECISION NOT NULL,
+  created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS adk_sessions_app_user_idx
+  ON public.adk_sessions (app_name, user_id, last_update_time DESC);
+
+CREATE TABLE IF NOT EXISTS public.adk_session_events (
+  seq         BIGSERIAL PRIMARY KEY,
+  session_id  TEXT NOT NULL REFERENCES public.adk_sessions(id) ON DELETE CASCADE,
+  event_id    TEXT NOT NULL,
+  payload     JSONB NOT NULL,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (session_id, event_id)
+);
+
+CREATE INDEX IF NOT EXISTS adk_session_events_sid_seq_idx
+  ON public.adk_session_events (session_id, seq ASC);

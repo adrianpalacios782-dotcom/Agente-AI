@@ -1,0 +1,64 @@
+{
+  "name": "ADRIAN AI — Resumen Semanal de Proyectos (BIMCAT S.R.L.)",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "30 8 * * 1"
+            }
+          ]
+        }
+      },
+      "id": "cron-weekly",
+      "name": "Cada lunes 08:30 (Tarija)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8001/api/automation/digest",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-Adrian-Automation-Token",
+              "value": "={{ $env.ADRIAN_AUTOMATION_TOKEN }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "http-digest",
+      "name": "Obtener Digest de ADRIAN AI",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [500, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst lines = [\n  `📋 Resumen semanal ADRIAN AI — ${d.entity}`,\n  `Fecha: ${d.generatedAt}`,\n  ``,\n  `Proyectos (${d.projects.length}):`,\n  ...d.projects.map(p => `- ${p.title} [${p.status}]`),\n  ``,\n  `Memoria confirmada: ${d.memoryStats.confirmed} | Hipótesis pendientes: ${d.memoryStats.hypothesis}`\n];\nreturn [{ json: { text: lines.join('\\n'), raw: d } }];"
+      },
+      "id": "format-summary",
+      "name": "Formatear Reporte",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [760, 300]
+    }
+  ],
+  "connections": {
+    "Cada lunes 08:30 (Tarija)": {
+      "main": [[{ "node": "Obtener Digest de ADRIAN AI", "type": "main", "index": 0 }]]
+    },
+    "Obtener Digest de ADRIAN AI": {
+      "main": [[{ "node": "Formatear Reporte", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "America/La_Paz"
+  }
+}

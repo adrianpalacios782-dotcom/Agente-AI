@@ -410,7 +410,11 @@ export const SettingsView: React.FC<{ overview: WorkspaceOverview | null; online
               <strong>Persistencia y Base de Conocimiento</strong>
             </div>
             <div style={{ fontSize: 13, color: '#D4D4D4' }}>
-              Backend activo: <strong style={{ color: '#20C997' }}>{overview.memoryBackend}</strong> ·
+              Memoria: <strong style={{ color: '#20C997' }}>{overview.memoryBackend}</strong> ·
+              Sesiones de chat: <strong style={{ color: '#20C997' }}>{overview.sessionsBackend ?? 'memory'}</strong> ·
+              GitHub (Módulo B): <strong>{overview.integrations?.githubEnabled ? 'Conectado' : 'Sin token'}</strong> ·
+              n8n (Fase 4): <strong>{overview.integrations?.n8nEnabled ? 'Token activo' : 'Pendiente'}</strong>
+              <br />
               Recuerdos confirmados: <strong>{overview.counts.memoryConfirmed}</strong> ·
               Hipótesis: <strong>{overview.counts.memoryHypothesis}</strong> ·
               Skills: <strong>{overview.counts.skills}</strong> ·

@@ -52,6 +52,21 @@ export const SUPABASE = {
     !supabaseKey.includes('tu_service_role_key'),
 };
 
+const githubToken = (process.env.GITHUB_TOKEN || '').trim();
+export const GITHUB = {
+  token: githubToken,
+  defaultOwner: (process.env.GITHUB_DEFAULT_OWNER || '').trim(),
+  enabled: githubToken.length > 10,
+};
+
+const n8nBase = (process.env.N8N_WEBHOOK_BASE_URL || 'http://127.0.0.1:5678/webhook').trim();
+const automationToken = (process.env.ADRIAN_AUTOMATION_TOKEN || '').trim();
+export const N8N = {
+  webhookBaseUrl: n8nBase,
+  automationToken,
+  enabled: automationToken.length >= 16,
+};
+
 export const PATHS = {
   root: PROJECT_ROOT,
   agentsMd: path.join(PROJECT_ROOT, 'AGENTS.md'),

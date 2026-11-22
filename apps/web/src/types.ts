@@ -99,7 +99,9 @@ export interface WorkspaceOverview {
   entity: string;
   models: { fast: string; standard: string; pro: string };
   memoryBackend: 'local' | 'postgres' | 'supabase';
+  sessionsBackend?: 'postgres' | 'memory';
   database: { postgresEnabled: boolean; supabaseEnabled: boolean };
+  integrations?: { githubEnabled: boolean; n8nEnabled: boolean };
   counts: {
     skills: number;
     contextFiles: number;

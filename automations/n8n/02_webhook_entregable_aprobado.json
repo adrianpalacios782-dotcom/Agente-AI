@@ -1,0 +1,37 @@
+{
+  "name": "ADRIAN AI — Receptor de Entregables Aprobados (HITL)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "adrian-deliverable",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-in",
+      "name": "Webhook Entregable Aprobado",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "const body = $input.first().json.body ?? $input.first().json;\nreturn [{ json: { status: 'received', entity: body.entity || 'BIMCAT S.R.L.', receivedAt: new Date().toISOString(), payload: body.payload ?? body } }];"
+      },
+      "id": "process-deliverable",
+      "name": "Validar y Preparar Envío",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [520, 300]
+    }
+  ],
+  "connections": {
+    "Webhook Entregable Aprobado": {
+      "main": [[{ "node": "Validar y Preparar Envío", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": false,
+  "settings": {
+    "timezone": "America/La_Paz"
+  }
+}

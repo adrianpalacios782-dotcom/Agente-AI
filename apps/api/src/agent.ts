@@ -20,6 +20,8 @@ import {
   saveDeliverableTool,
   uploadCreativeAssetTool,
 } from './tools/index.js';
+import { githubTools } from './tools/githubTools.js';
+import { triggerN8nWebhookTool } from './tools/n8nTools.js';
 import {
   MARKETING_INSTRUCTION,
   RESEARCH_INSTRUCTION,
@@ -60,6 +62,7 @@ const projectTools = [
 const rootTools = [
   ...coreMemoryAndContext,
   ...projectTools,
+  triggerN8nWebhookTool,
   researchTool,
 ];
 
@@ -70,6 +73,7 @@ const marketingTools = [
   brandComplianceCheckTool,
   projectLogTool,
   saveDeliverableTool,
+  triggerN8nWebhookTool,
   researchTool,
   ...(SUPABASE.enabled ? [listCreativeAssetsTool, uploadCreativeAssetTool] : []),
 ];
@@ -80,6 +84,7 @@ const softwareTools = [
   loadSkillTool,
   listAuthorizedFilesTool,
   readAuthorizedFileTool,
+  ...githubTools,
   projectLogTool,
   saveDeliverableTool,
   researchTool,

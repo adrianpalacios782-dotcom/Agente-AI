@@ -18,7 +18,7 @@ services:
       timeout: 5s
       retries: 10
 
-  # Preparado para Fase 4: levantar con `docker compose --profile automation up -d`
+  # Fase 4: levantar con `docker compose --profile automation up -d`
   n8n:
     image: n8nio/n8n:latest
     container_name: adrian-ai-n8n
@@ -26,9 +26,13 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:${N8N_PORT:-5678}:5678"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       GENERIC_TIMEZONE: America/La_Paz
       TZ: America/La_Paz
+      N8N_SECURE_COOKIE: "false"
+      ADRIAN_AUTOMATION_TOKEN: ${ADRIAN_AUTOMATION_TOKEN:-}
     volumes:
       - adrian_n8n:/home/node/.n8n
 
